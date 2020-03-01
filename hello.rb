@@ -3,9 +3,12 @@ require 'open-uri'
 require 'json'
 require 'csv'
 
+START_PAGE = ARGV.first
+CSV_FILE = ARGV.last
+
 def main
   server_boards = []
-  main_page = "https://www.petsonic.com/snacks-huesos-para-perros/"
+  main_page = START_PAGE
   catalog_pages_links(main_page).each do |catalog_page_url|
     # puts catalog_page_url
     catalog_page = Nokogiri::HTML(open URI.join(main_page, catalog_page_url))
@@ -21,7 +24,7 @@ def main
       server_boards.concat ( server_board_info(server_board_url, board_name))
     end
     #puts server_boards
-    CSV.open("my.csv", "w") do |csv|
+    CSV.open("#{CSV_FILE}", "w") do |csv|
       csv << ["Name", "Price", "Image"]
       server_boards.each do |item|
         csv << [item["Title"] + " - " + item["Weight"], item["Price"], item["Logo"] ]
