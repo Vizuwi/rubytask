@@ -1,21 +1,38 @@
+#!/usr/bin/env ruby
+
+require 'bundler/inline'
+
+gemfile do
+  source 'https://rubygems.org'
+
+  gem 'nokogiri'
+  gem 'curb'
+  # gem 'pry'
+end
+
 require 'nokogiri'
 require 'curb'
 require 'csv'
+# require 'pry'
 
 START_PAGE = ARGV.first
 CSV_FILE = ARGV.last
 
 def main
   server_boards = []
-  main_page = START_PAGE
-  catalog_pages_links(main_page).each do |catalog_page_url|
+  catalog_pages_links = fetch_catalog_pages_links
+  total_pages_count = catalog_pages_links.count
+  catalog_pages_links.each_with_index do |catalog_page_url, page_number|
     catalog_page = Nokogiri::HTML(Curl.get(catalog_page_url).body_str)
+    # binding.pry
     server_boards_links = catalog_page.search("h2.nombre-producto-list a.product-name")
-    server_boards_urls = server_boards_links.map { |el| el.attr 'href' }.uniq
-    server_boards_names = server_boards_links.map { |el| el.attr 'title' }.uniq
-    server_boards_urls.each_with_index do |server_board_url, index|
-      board_name = server_boards_names[index]
-      server_boards.concat ( server_board_info(server_board_url, board_name))
+    total_count = server_boards_links.count
+    server_boards_links.each_with_index do |el, index|
+      server_board_url = el.attr('href')
+      board_name = el.attr('title')
+
+      print("Processing page ##{page_number + 1} of ##{total_pages_count}, product: ##{index + 1} of ##{total_count}     \r")
+      server_boards += server_board_info(server_board_url, board_name)
     end
     CSV.open("#{CSV_FILE}", "w") do |csv|
       csv << ["Name", "Price", "Image"]
@@ -27,11 +44,18 @@ def main
   end
 end
 
-def catalog_pages_links(main_page)
-  pages_of_catalog = [main_page]
-  doc = Nokogiri::HTML(Curl.get(main_page).body_str)
-  link_to_other_pages = doc.xpath("//li[@class='next']/a").map { |el| el.attr 'href' }
-  pages_of_catalog += link_to_other_pages.uniq
+def fetch_catalog_pages_links
+  pages_of_catalog = [START_PAGE]
+  doc = Nokogiri::HTML(Curl.get(START_PAGE).body_str)
+
+  total_products = doc.at_css('[id="center_column"] .heading-counter').text.to_i
+  products_per_page = doc.at_css('.product_list').children.count
+  page_count = (total_products / products_per_page.to_f).ceil
+
+  puts "Total items count for the catgory: #{total_products}\n"
+  return pages_of_catalog if page_count == 1
+
+  pages_of_catalog + (2..page_count).map { |number| "#{START_PAGE}?p=#{number}" }
 end
 
 def server_board_info(url, name)
@@ -45,7 +69,7 @@ def server_board_info(url, name)
     item['Weight'] = el.search("label.label_comb_price span.radio_label").map { |el| el.content }.first
     item['Logo'] = logo
     item['Title'] = name
-    items.push(item)
+    items << item
   end
   items
 end
